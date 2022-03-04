@@ -1,0 +1,195 @@
+---
+title: "BrookingsScraping"
+author: "Megan Willis-Jackson"
+date: "2/25/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(rvest)
+library(RSelenium)
+library(netstat)
+library(selectr)
+library(xml2)
+library(splitstackshape)
+
+
+```
+
+```{r}
+# url
+url <- "https://app.powerbi.com/view?r=eyJrIjoiYTA0ZGEyMDAtMTU3YS00NTg5LThiMjYtNGJlODUzZTczYjQwIiwidCI6IjRjODM1NGJjLWJjNGQtNDRmYS05ZTEyLTg0ZDIxMWE5ZWU2YSIsImMiOjF9"
+
+
+#start the server
+rs_driver_object <- rsDriver(browser = 'chrome',
+                             verbose = F,
+                             chromever = '98.0.4758.102',
+                             port = free_port())
+
+# create a client object
+remDr <- rs_driver_object$client
+
+
+# open a browser
+remDr$open()
+
+# navigate to website
+remDr$navigate(url)
+
+#scroll down
+webElem <- remDr$findElement(using = 'css selector', '#pvExplorationHost > div > div > exploration > div > explore-canvas > div > div.canvasFlexBox > div > div.displayArea.disableAnimations.fitToWidthOrigin > div.visualContainerHost > visual-container-repeat > visual-container:nth-child(31) > transform > div > div.visualContent > div > visual-modern > div > div > div.tableEx > div:nth-child(4) > div:nth-child(2) > svg')
+
+needed_runs <- seq(1, 400, 1)
+num_projects <- 2334 # as of 2/25/2022
+
+covid_data <- c()
+
+
+for(i in needed_runs) {
+  
+  if(i == 1){
+    covid_data <- c()
+    data_table <- list()
+    covid_data_temp <- c()
+ 
+ #find webpage with table, specify css of data table
+data_table <- read_html(remDr$getPageSource()[[1]]) %>%
+  querySelector("div.visual.visual-tableEx")
+
+#get column headers
+col_headers <- data_table %>%
+  querySelectorAll("div.columnHeaders div.pivotTableCellWrap") %>%
+  map_chr(xml_text)
+
+  covid_data_temp <- data_table %>%
+  querySelectorAll("div.bodyCells div.pivotTableCellWrap") %>%
+  map(xml_parent) %>%
+  unique() %>%
+  map(~ .x %>% querySelectorAll("div.pivotTableCellWrap") %>% map_chr(xml_text)) %>%
+  setNames(col_headers) %>%
+  bind_cols()
+
+
+covid_data <- covid_data %>%
+  rbind(covid_data_temp) %>%
+  as.data.frame() %>%
+  unique()
+    
+  } else{
+    if(nrow(covid_data) < num_projects){
+        webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+webElem$clickElement()
+    
+  data_table <- list()
+covid_data_temp <- c()
+
+#find webpage with table, specify css of data table
+data_table <- read_html(remDr$getPageSource()[[1]]) %>%
+  querySelector("div.visual.visual-tableEx")
+
+#get column headers
+col_headers <- data_table %>%
+  querySelectorAll("div.columnHeaders div.pivotTableCellWrap") %>%
+  map_chr(xml_text)
+
+# rowheaders <- data_table %>%
+#   querySelectorAll("div.rowHeaders div.pivotTableCellWrap") %>%
+#   map_chr(xml_text)
+
+
+#
+covid_data_temp <- data_table %>%
+  querySelectorAll("div.bodyCells div.pivotTableCellWrap") %>%
+  map(xml_parent) %>%
+  unique() 
+
+covid_data_temp <- if(length(covid_data_temp) == 14){
+  covid_data_temp[-c(1:7)] %>%
+    map(~ .x %>% querySelectorAll("div.pivotTableCellWrap") %>% map_chr(xml_text)) %>%
+    setNames(col_headers) %>%
+    bind_cols()
+    
+} else{
+  covid_data_temp %>%
+    map(~ .x %>% querySelectorAll("div.pivotTableCellWrap") %>% map_chr(xml_text)) %>%
+    setNames(col_headers) %>%
+    bind_cols()
+}
+
+
+
+covid_data <- covid_data %>%
+  rbind(covid_data_temp) %>%
+  as.data.frame() %>%
+  unique()
+  
+    }
+  
+
+}
+
+}
+
+
+```
+
+
+```{r}
+covid_data2 <- covid_data
+colnames(covid_data2) <- c("LocalGovernment","Amount","SpendingGroup",
+                           "SpendingSubgroup","ProjectOverview",
+                           "TreasuryEligibleUseGroup","TreasuryEligibleUseSubgroup")
+
+spl <- strsplit(covid_data2$LocalGovernment, ", ")
+covid_data2 <- data.frame(covid_data2,
+                          'City_or_County' = sapply(spl, "[", 1),
+                          'State' = sapply(spl, "[", 2))
+
+write_csv(covid_data2, "scraped_arpainvestmenttracker.csv")
+
+
+```
+
+
+
+
+
+
+
