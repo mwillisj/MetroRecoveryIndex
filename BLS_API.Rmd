@@ -1,0 +1,157 @@
+---
+title: "BLS_API"
+author: "Megan Willis-Jackson"
+date: "3/4/2022"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(blsAPI)
+library(rjson)
+library(ggplot2)
+library(readxl)
+library(patchwork)
+
+```
+
+```{r}
+## Read city codes for BLS
+
+city_codes <- read_excel("BLS_city_codes.xlsx")
+city_codes <- city_codes %>%
+  mutate(unemp = paste0(city_codes$area_code, '04'),
+         emp = paste0(city_codes$area_code, '05'),
+         workforce = paste0(city_codes$area_code, '06'),
+         emp_pop_ratio = paste0(city_codes$area_code, '07'),
+         lab_part_rate = paste0(city_codes$area_code, '08'))
+
+
+
+```
+
+
+
+
+
+```{r}
+## Pull the data via the API
+
+# c('LAUCT365100000000004', 'LAUCT365100000000006') LAUCT350200000000004
+
+x <- 0
+df_temp <- df_compiled
+df_compiled <- c()
+
+
+payload <- list(
+  'seriesid'= c('LAUCT365100000000005'),
+  'startyear'=2020,
+  'endyear'=2022,
+  'registrationKey' = '9c70090c2cc14a8495ff0267ac83146e')
+response <- blsAPI(payload, 2)
+json <- fromJSON(response)
+
+
+
+for(j in 1:nrow(city_codes)) {
+
+  x <- x + 1
+  
+payload <- list(
+  'seriesid'= c(as.character(city_codes[x,5]), as.character(city_codes[x,7])),
+  'startyear'=2020,
+  'endyear'=2022,
+  'registrationKey' = '9c70090c2cc14a8495ff0267ac83146e')
+response <- blsAPI(payload, 2)
+json <- fromJSON(response)
+
+
+## Process results
+apiDF <- function(data){
+  df <- data.frame(year=character(),
+                   period=character(),
+                   periodName=character(),
+                   value=character(),
+                   stringsAsFactors=FALSE)
+  
+  i <- 0
+  for(d in data){
+    i <- i + 1
+    df[i,] <- unlist(d)
+  }
+  return(df)
+}
+
+unemployed.df <- apiDF(json$Results$series[[1]]$data)
+unemployed.df[1,4] <- json[["Results"]][["series"]][[1]][["data"]][[1]][["value"]]
+
+labor.force.df <- apiDF(json$Results$series[[2]]$data)
+labor.force.df[1,4] <- json[["Results"]][["series"]][[2]][["data"]][[1]][["value"]]
+
+## Change value type from character to numeric
+unemployed.df[,4] <- as.numeric(unemployed.df[,4])
+labor.force.df[,4] <- as.numeric(labor.force.df[,4])
+
+## Rename value prior to merging
+names(unemployed.df)[4] <- 'unemployed'
+names(labor.force.df)[4] <- 'labor.force'
+
+## Merge data frames
+df <- merge(unemployed.df, labor.force.df)
+
+## Create date and unemployment rate
+df$unemployment.rate <- df$unemployed / df$labor.force
+df$date <- as.POSIXct(strptime(paste0('1',df$periodName,df$year), '%d%B%Y'))
+df$location <- ""
+df[,8] <- city_codes[x,1]
+
+df_compiled <- df_compiled %>%
+  rbind(df)
+
+}
+
+
+df_compiled <- df_compiled %>%
+  mutate(employed = labor.force - unemployed)
+  
+```
+
+
+
+
+```{r}
+options(scipen = 999)
+
+## Plot data
+df_wide <- df_compiled %>%
+  select(-c(unemployed, labor.force)) %>%
+  pivot_wider(names_from = location, values_from = c(unemployment.rate))
+
+
+## Beginning and "end" dates for COVID-19 (used in shaded area)
+gr.start <- as.POSIXct(strptime('1March2020', '%d%B%Y'))
+gr.end <- as.POSIXct(strptime('1March2022', '%d%B%Y'))
+
+## Plot the data
+
+ggplot(df_compiled %>% filter(location == "Boston, MA"),
+       aes(x = date, y = unemployment.rate, color = location)) +
+  geom_line(show.legend = F) 
+
+ggplot(df_compiled %>% filter(location == "Boston, MA"),
+       aes(x = date)) +
+  # geom_rect(aes(xmin = gr.start, xmax = gr.end, ymin = -Inf, ymax = Inf),
+  #           alpha = 0.4, fill="#DDDDDD", show.legend = F, color = NA) + 
+  geom_bar(aes(y = employed), fill = "darkblue", stat = "identity",
+            show.legend = F) +
+  geom_line(aes(y = unemployment.rate*1100000), color = "goldenrod", 
+            linetype = 8, size = .8,
+            show.legend = F) + 
+  scale_y_continuous(sec.axis = sec_axis(~. / 10000, name = "Unemployment Rate (%)")) +
+  ylab('Total Employment')  + 
+  # xlab('COVID-era shaded in gray') + 
+  ggtitle('Unemployment Rate for New York, NY (Jan 2020 to Dec 2022)') + 
+  theme_bw()
+
+```
