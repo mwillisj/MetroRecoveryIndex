@@ -114,6 +114,8 @@ df_compiled <- df_compiled %>%
 
 df_compiled <- df_compiled %>%
   mutate(employed = labor.force - unemployed)
+
+write.csv(df_compiled, "bls_stats.csv")
   
 ```
 
@@ -150,7 +152,7 @@ ggplot(df_compiled %>% filter(location == "Boston, MA"),
             show.legend = F) + 
   scale_y_continuous(sec.axis = sec_axis(~. / 10000, name = "Unemployment Rate (%)")) +
   ylab('Total Employment')  + 
-  # xlab('COVID-era shaded in gray') + 
+  xlab(NULL) +
   ggtitle('Unemployment Rate for New York, NY (Jan 2020 to Dec 2022)') + 
   theme_bw()
 
